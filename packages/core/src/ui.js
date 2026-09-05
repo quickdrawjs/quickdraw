@@ -419,6 +419,75 @@ export function buildUI(editor, { hidden = false, onSave, themeToggle = true, gr
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 5000)
   }
+  // ---- keyboard help overlay (press ?) -----------------------------------
+  const SHORTCUTS = [
+    { label: 'Tools', rows: [
+      ['Select', 'V / 1'], ['Hand (hold Space)', 'H'], ['Draw', 'D / P / B'],
+      ['Highlight', 'I'], ['Eraser', 'E'], ['Laser', 'K'],
+      ['Arrow', 'A'], ['Line', 'L'], ['Shape', 'G'],
+      ['Rectangle', 'R'], ['Ellipse', 'O'], ['Text', 'T'], ['Sticky note', 'N'],
+    ]},
+    { label: 'Edit', rows: [
+      ['Undo', '⌘Z'], ['Redo', '⇧⌘Z'], ['Select all', '⌘A'],
+      ['Copy', '⌘C'], ['Cut', '⌘X'], ['Paste', '⌘V'], ['Duplicate', '⌘D'],
+    ]},
+    { label: 'Arrange', rows: [
+      ['Bring to front', ']'], ['Send to back', '['], ['Nudge', 'Arrows (Shift = 8px)'],
+    ]},
+    { label: 'View', rows: [
+      ['Zoom to fit', '⇧1'], ['Reset zoom', '⇧0'], ['Zoom in / out', '⌘+ / ⌘−'],
+    ]},
+    { label: 'Board', rows: [
+      ['Delete selection', '⌫'], ['Clear board', '⇧⌘⌫'],
+      ['Edit / finish text', 'Enter'], ['Cancel / deselect', 'Esc'],
+    ]},
+    { label: 'Help', rows: [['Keyboard shortcuts', '?']] },
+  ]
+  const buildHelp = () => {
+    const backdrop = el('div', 'qd-help-backdrop')
+    const panel = el('div', 'qd-help-panel')
+    const head = el('div', 'qd-help-head')
+    const title = el('div', 'qd-help-title'); title.textContent = 'Keyboard shortcuts'
+    const close = el('button', 'qd-help-close')
+    close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+    close.setAttribute('aria-label', 'Close')
+    head.appendChild(title); head.appendChild(close)
+    panel.appendChild(head)
+    for (const g of SHORTCUTS) {
+      const sec = el('div', 'qd-help-group')
+      const gl = el('div', 'qd-help-glabel'); gl.textContent = g.label
+      sec.appendChild(gl)
+      for (const [name, keys] of g.rows) {
+        const row = el('div', 'qd-help-row')
+        const nm = el('span', 'qd-help-name'); nm.textContent = name
+        const kc = el('span', 'qd-help-keys'); kc.textContent = keys
+        row.appendChild(nm); row.appendChild(kc)
+        sec.appendChild(row)
+      }
+      panel.appendChild(sec)
+    }
+    backdrop.appendChild(panel)
+    backdrop.addEventListener('pointerdown', (e) => { if (e.target === backdrop) closeHelp() })
+    close.addEventListener('click', () => closeHelp())
+    return backdrop
+  }
+  let helpEl = null
+  const closeHelp = () => {
+    if (!helpEl) return
+    helpEl.remove(); helpEl = null
+    document.removeEventListener('keydown', onHelpKey, true)
+  }
+  const onHelpKey = (e) => {
+    if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); e.stopPropagation(); closeHelp() }
+  }
+  const toggleHelp = () => {
+    if (helpEl) { closeHelp(); return }
+    helpEl = buildHelp()
+    ui.appendChild(helpEl)
+    document.addEventListener('keydown', onHelpKey, true)
+    refresh()
+  }
+  editor.on('help', toggleHelp)
 
   // ---- responsive fit ------------------------------------------------------
   // Instead of scaling down, the dock sheds tools into the "more" flyout as
@@ -516,6 +585,7 @@ export function buildUI(editor, { hidden = false, onSave, themeToggle = true, gr
       offs.forEach((f) => f())
       ro.disconnect()
       root.removeEventListener('pointerdown', closeOnCanvas, { capture: true })
+      closeHelp()
       ui.remove()
     },
   }
