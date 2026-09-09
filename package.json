@@ -7,13 +7,15 @@
   "workspaces": [
     "packages/*",
     "examples/react-demo",
+    "examples/sync",
     "apps/*"
   ],
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && npm run test --workspace=quickdraw-sync-example",
     "test:watch": "vitest",
     "build": "npm run build --workspace=@quickdrawjs/react-native",
     "dev": "npm run dev --workspace=quickdraw-react-demo",
+    "dev:sync": "npm run dev --workspace=quickdraw-sync-example",
     "typecheck": "tsc -p tsconfig.json",
     "star-history": "node scripts/star-history.mjs",
     "publish:all": "npm publish --workspace=@quickdrawjs/core --access public && npm publish --workspace=@quickdrawjs/react --access public && npm publish --workspace=@quickdrawjs/react-native --access public"
