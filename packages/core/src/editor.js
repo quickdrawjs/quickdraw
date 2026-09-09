@@ -1262,6 +1262,7 @@ export class Editor {
       else this.setTool('select')
       return
     }
+        if (k === '?') { e.preventDefault(); this.emit('help'); return }
     // wipe the board — two modifiers deep, and undoable like any other edit
     if (meta && e.shiftKey && (k === 'delete' || k === 'backspace')) {
       e.preventDefault()
