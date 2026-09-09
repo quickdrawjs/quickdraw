@@ -35,7 +35,7 @@ A simple, joyful drawing experience:
 - **Pressure ink** — a freehand pen whose width breathes with stylus pressure,
   or with velocity for mouse users; strokes taper like a real pen
 - **Highlighter** that soaks into the paper (and glows on dark boards)
-- **Shapes** — rectangle, ellipse, triangle, diamond, hexagon, star — with a
+- **Shapes** — rectangle, ellipse, triangle, diamond, hexagon, star, cloud — with a
   seeded hand-drawn wobble, four fill styles, and editable labels
 - **Arrows** with draggable bend, lines, text, sticky notes
 - **Images** — paste, drag-drop, or pick; auto-downscaled and stored in-document
@@ -48,8 +48,9 @@ A simple, joyful drawing experience:
 - **Undo/redo** — one entry per gesture, however many events it took
 - **Light & dark themes**, twelve named colors that resolve per theme, and a
   theme switch built into the board menu
-- **Grid backdrops** — ruled lines or dotted intersections, spacing that adapts
-  to the zoom and fades in rather than popping
+- **Grid backdrops** — plain, ruled lines, notebook rules, dots, crosses
+  (blueprint), and isometric; default is `lines`; spacing adapts to the zoom
+  and fades in rather than popping
 - **PNG export** — whole board or selection, on paper or transparent
 - **A responsive floating toolbar** that sheds tools gracefully as the frame
   narrows — or hide it and build your own from the headless API
