@@ -429,3 +429,41 @@
   -webkit-user-select: text;
   user-select: text;
 }
+/* keyboard help overlay (press ?) */
+.qd-help-backdrop {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.28);
+  pointer-events: auto; animation: qd-help-in 140ms ease;
+}
+.qd-help-panel {
+  width: min(440px, 100%); max-height: 82%; overflow: auto;
+  padding: 16px 18px 18px; border-radius: 14px;
+  background: var(--qd-pop-bg); color: var(--qd-ink);
+  border: 1px solid var(--qd-border); box-shadow: var(--qd-pop-shadow);
+  font: 500 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.qd-help-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.qd-help-title { font-size: 15px; font-weight: 600; color: var(--qd-ink-strong); }
+.qd-help-close {
+  display: flex; width: 26px; height: 26px; padding: 0;
+  align-items: center; justify-content: center; cursor: pointer;
+  border: 1px solid var(--qd-border); border-radius: 7px;
+  background: var(--qd-bar-bg); color: var(--qd-ink);
+}
+.qd-help-close:hover { background: var(--qd-hover); }
+.qd-help-close svg { width: 15px; height: 15px; }
+.qd-help-group { margin-bottom: 14px; }
+.qd-help-group:last-child { margin-bottom: 0; }
+.qd-help-glabel {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--qd-ink-faint); margin-bottom: 6px;
+}
+.qd-help-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.qd-help-name { color: var(--qd-ink); }
+.qd-help-keys {
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--qd-ink-strong); padding: 2px 7px; border-radius: 6px;
+  background: var(--qd-bar-bg); border: 1px solid var(--qd-border); white-space: nowrap;
+}
+@keyframes qd-help-in { from { opacity: 0 } to { opacity: 1 } }
