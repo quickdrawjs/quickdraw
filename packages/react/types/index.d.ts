@@ -13,7 +13,7 @@ export interface QuickdrawRef {
 export interface QuickdrawProps {
   /** 'light' | 'dark' — live-switchable. */
   theme?: ThemeId | string
-  /** 'none' | 'lines' | 'dots' — the backdrop. Live-switchable. */
+  /** 'none' | 'lines' | 'ruled' | 'dots' | 'crosses' | 'iso' — the backdrop. Live-switchable. */
   grid?: GridId
   /** Lock input (also hides the toolbar). */
   readonly?: boolean

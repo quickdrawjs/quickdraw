@@ -34,7 +34,7 @@ export interface QuickdrawRef {
 
 export interface QuickdrawProps {
   theme?: ThemeId | string
-  /** 'none' | 'lines' | 'dots' — the backdrop. Live-switchable. */
+  /** 'none' | 'lines' | 'ruled' | 'dots' | 'crosses' | 'iso' — the backdrop. Live-switchable. */
   grid?: GridId
   readonly?: boolean
   hideUi?: boolean
