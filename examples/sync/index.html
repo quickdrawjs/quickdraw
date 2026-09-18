@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quickdraw — real-time sync example</title>
+  <link rel="stylesheet" href="../../packages/core/src/quickdraw.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: #eef1f6; color: #1c2434; font-family: system-ui, sans-serif; }
+    body { padding: 20px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 20px; max-width: 1400px; margin: 0 auto 14px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    p { margin: 0; color: #5d6678; font-size: 14px; }
+    code { font-size: 0.9em; }
+    .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; max-width: 1400px; margin: auto; }
+    .client { min-width: 0; overflow: hidden; border: 1px solid #d5dae3; border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(30, 40, 60, 0.08); }
+    .client-bar { display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 12px; border-bottom: 1px solid #e2e6ed; font-size: 13px; font-weight: 650; }
+    .status { color: #a33; font-weight: 500; }
+    .status.connected { color: #18794e; }
+    .board { height: min(72vh, 720px); min-height: 440px; position: relative; }
+    @media (max-width: 800px) {
+      body { padding: 10px; }
+      header { align-items: start; flex-direction: column; }
+      .boards { grid-template-columns: 1fr; }
+      .board { height: 65vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Real-time sync over a WebSocket relay</h1>
+      <p>Draw on either board. Diffs are relayed to the other client; conflicts use record-level last-writer-wins.</p>
+    </div>
+    <p><code>npm run dev:sync</code></p>
+  </header>
+  <main class="boards">
+    <section class="client">
+      <div class="client-bar"><span>Client A</span><span class="status" id="status-a">connecting</span></div>
+      <div class="board" id="board-a"></div>
+    </section>
+    <section class="client">
+      <div class="client-bar"><span>Client B</span><span class="status" id="status-b">connecting</span></div>
+      <div class="board" id="board-b"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { createQuickdraw } from '../../packages/core/src/index.js'
+
+    const relayUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`
+
+    function connect(name) {
+      const board = createQuickdraw({
+        container: document.getElementById(`board-${name}`),
+        theme: 'light',
+        grid: 'dots',
+      })
+      const status = document.getElementById(`status-${name}`)
+      const socket = new WebSocket(relayUrl)
+
+      socket.addEventListener('open', () => {
+        status.textContent = 'connected'
+        status.classList.add('connected')
+      })
+      socket.addEventListener('close', () => {
+        status.textContent = 'disconnected'
+        status.classList.remove('connected')
+      })
+      socket.addEventListener('error', () => {
+        status.textContent = 'connection error'
+        status.classList.remove('connected')
+      })
+
+      board.editor.store.listen((diff) => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(diff))
+      }, { source: 'user' })
+      socket.addEventListener('message', (event) => {
+        board.editor.store.applyDiff(JSON.parse(event.data), 'remote')
+      })
+
+      return { board, socket }
+    }
+
+    const a = connect('a')
+    const b = connect('b')
+    window.boards = { a: a.board, b: b.board }
+    window.sockets = { a: a.socket, b: b.socket }
+  </script>
+</body>
+</html>
