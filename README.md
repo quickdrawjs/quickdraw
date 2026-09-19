@@ -192,6 +192,7 @@ socket.onmessage = (e) => store.applyDiff(JSON.parse(e.data), 'remote')
 | `⌘+` / `⌘−` | Zoom in / out |
 | `⌫` / `⇧⌘⌫` | Delete selection / clear the board (undoable) |
 | `Enter` / `Esc` | Edit text / done |
+| `?` | Show this list on the board |
 
 ## Repository
 

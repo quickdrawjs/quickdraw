@@ -652,3 +652,40 @@ describe('createQuickdraw UI', () => {
     c2.remove()
   })
 })
+
+describe('keyboard help overlay', () => {
+  const press = (board, key) =>
+    board.editor._keyDown({ key, shiftKey: true, metaKey: false, ctrlKey: false, preventDefault() {} })
+
+  it('? toggles the overlay, Esc closes it, destroy tears it down', () => {
+    const c2 = document.createElement('div')
+    document.body.appendChild(c2)
+    const board = createQuickdraw({ container: c2 })
+    const open = () => !!c2.querySelector('.qd-help-backdrop')
+
+    press(board, '?')
+    expect(open()).toBe(true)
+    expect(c2.querySelectorAll('.qd-help-row').length).toBeGreaterThan(20)
+    press(board, '?')
+    expect(open()).toBe(false)
+
+    press(board, '?')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(open()).toBe(false)
+
+    press(board, '?')
+    board.destroy()
+    expect(document.querySelector('.qd-help-backdrop')).toBe(null)
+    c2.remove()
+  })
+
+  it('stays quiet on a readonly board', () => {
+    const c2 = document.createElement('div')
+    document.body.appendChild(c2)
+    const board = createQuickdraw({ container: c2, readonly: true })
+    press(board, '?')
+    expect(c2.querySelector('.qd-help-backdrop')).toBe(null)
+    board.destroy()
+    c2.remove()
+  })
+})

@@ -194,7 +194,7 @@ export interface EditorOptions {
 
 export type EditorEvent =
   | 'change' | 'history' | 'camera' | 'tool' | 'styles' | 'selection'
-  | 'theme' | 'grid' | 'edit' | 'scribbles' | 'penmode'
+  | 'theme' | 'grid' | 'edit' | 'scribbles' | 'penmode' | 'help'
 
 /**
  * The editor: camera, tools, selection, input and rendering over a Store.
