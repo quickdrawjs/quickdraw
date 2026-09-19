@@ -3,6 +3,8 @@
 // website's sponsor wall updates itself — nobody edits a list by hand when a
 // sponsorship starts or lapses. Same shape as star-history: CI runs this on a
 // schedule and commits the snapshot; the static build just reads the file.
+// The same run rewrites the sponsor block between the markers in README.md,
+// so the repo page never lags the website.
 //
 // Reading sponsorships needs an authenticated token. The Actions token can
 // usually read an org's public sponsors; if GitHub rejects it, add a classic
@@ -11,12 +13,14 @@
 //
 //   GITHUB_TOKEN=<token> node scripts/sponsors.mjs
 
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { replaceSponsorsBlock } from './lib/sponsorsReadme.mjs'
 
 const LOGIN = process.env.SPONSORS_LOGIN ?? 'quickdrawjs'
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs')
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const OUT = join(ROOT, 'docs')
 
 const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
 if (!token) {
@@ -88,9 +92,32 @@ const sponsors = (conn.nodes ?? [])
     since: n.createdAt?.slice(0, 10) ?? null,
   }))
 
-mkdirSync(OUT, { recursive: true })
-writeFileSync(
-  join(OUT, 'sponsors.json'),
-  JSON.stringify({ generatedAt: new Date().toISOString(), login: LOGIN, sponsors }, null, 2) + '\n',
-)
-console.log(`sponsors: wrote ${sponsors.length} sponsor(s) to docs/sponsors.json`)
+// Only rewrite the snapshot when the wall actually changed — a fresh
+// generatedAt alone would mean a commit (and a site deploy) on every run.
+const snapshotPath = join(OUT, 'sponsors.json')
+let previous = null
+try {
+  previous = JSON.parse(readFileSync(snapshotPath, 'utf8')).sponsors
+} catch {
+  // first run — no snapshot yet
+}
+if (JSON.stringify(previous) === JSON.stringify(sponsors)) {
+  console.log(`sponsors: ${sponsors.length} sponsor(s), unchanged`)
+} else {
+  mkdirSync(OUT, { recursive: true })
+  writeFileSync(
+    snapshotPath,
+    JSON.stringify({ generatedAt: new Date().toISOString(), login: LOGIN, sponsors }, null, 2) + '\n',
+  )
+  console.log(`sponsors: wrote ${sponsors.length} sponsor(s) to docs/sponsors.json`)
+}
+
+const readmePath = join(ROOT, 'README.md')
+const readme = readFileSync(readmePath, 'utf8')
+const next = replaceSponsorsBlock(readme, sponsors)
+if (next === null) {
+  console.warn('sponsors: README.md has no sponsors markers — left it alone')
+} else if (next !== readme) {
+  writeFileSync(readmePath, next)
+  console.log('sponsors: updated the README sponsor block')
+}

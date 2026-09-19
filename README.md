@@ -237,7 +237,13 @@ Quickdraw is MIT-licensed with no paid tier — [sponsors](https://github.com/sp
 are what keep it that way. Sponsors get their logo on
 [the website](https://tryquickdraw.com/sponsors/) and here:
 
-<a href="https://tryquickdraw.com/sponsors/"><i>No sponsors yet — your logo could be the first.</i></a>
+<!-- sponsors:start -->
+<table>
+<tr>
+<td align="center"><a href="https://tldraw.com"><img src="https://avatars.githubusercontent.com/u/86724562?v=4&amp;s=128" width="64" height="64" alt="tldraw"><br><sub><b>tldraw</b></sub></a></td>
+</tr>
+</table>
+<!-- sponsors:end -->
 
 ## Star history
 

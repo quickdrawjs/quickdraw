@@ -1,8 +1,9 @@
 name: Sponsors
 
-# Keeps docs/sponsors.json current so the website's sponsor wall features
-# sponsors automatically — new sponsors appear within a day of sponsoring,
-# lapsed ones roll off, no manual list edits.
+# Keeps docs/sponsors.json and the README sponsor block current so the website's
+# sponsor wall and the repo page feature sponsors automatically — new sponsors
+# appear within a few hours of sponsoring, lapsed ones roll off, no manual list
+# edits.
 #
 # The Sponsors GraphQL API rejects anonymous reads, so this runs here with a
 # token. If the default Actions token can't read the org's sponsorships, add
@@ -11,12 +12,13 @@ name: Sponsors
 
 on:
   schedule:
-    - cron: '43 4 * * *' # daily, 04:43 UTC
+    - cron: '43 */3 * * *' # every 3 hours — a new sponsor shouldn't wait a day
   workflow_dispatch: # refresh on demand
   push:
     branches: [main]
     paths:
       - 'scripts/sponsors.mjs'
+      - 'scripts/lib/sponsorsReadme.mjs'
       - '.github/workflows/sponsors.yml'
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
         run: |
           # Stage first: on the very first run the file is untracked, and
           # `git diff` alone would report no change and skip the seed commit.
-          git add -A docs/sponsors.json
+          git add -A docs/sponsors.json README.md
           if git diff --cached --quiet; then
             echo "No change."
             exit 0
