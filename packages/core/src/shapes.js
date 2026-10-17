@@ -135,6 +135,27 @@ export function resetTextLayouts() {
 
 // ---- text layout -----------------------------------------------------------
 
+const graphemeSegmenter = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null
+
+function wrapOversizedLine(text, ctx, maxW) {
+  const parts = graphemeSegmenter
+    ? Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
+    : Array.from(text)
+  const lines = []
+  let line = ''
+  for (const part of parts) {
+    const next = line + part
+    if (line && ctx.measureText(next).width > maxW) {
+      lines.push({ text: line, w: ctx.measureText(line).width })
+      line = part
+    } else line = next
+  }
+  if (line) lines.push({ text: line, w: ctx.measureText(line).width })
+  return lines
+}
+
 function wrapLines(text, font, fontSize, maxW) {
   const ctx = measurer()
   ctx.font = `500 ${fontSize}px ${font}`
@@ -148,6 +169,11 @@ function wrapLines(text, font, fontSize, maxW) {
         out.push({ text: line, w: ctx.measureText(line).width })
         line = word.trimStart()
       } else line = test
+      if (maxW && ctx.measureText(line).width > maxW) {
+        const wrapped = wrapOversizedLine(line, ctx, maxW)
+        out.push(...wrapped.slice(0, -1))
+        line = wrapped.length ? wrapped[wrapped.length - 1].text : ''
+      }
     }
     out.push({ text: line, w: ctx.measureText(line).width })
   }
