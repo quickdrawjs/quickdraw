@@ -105,6 +105,21 @@ describe('Store CRUD + diffs', () => {
 })
 
 describe('undo / redo', () => {
+  it('keeps no undo step for an edit that changes nothing', () => {
+    const s = new Store()
+    s.put(shape('a'))
+    const n = s.undos.length
+    s.update('a', { x: 0 })
+    s.beginBatch()
+    s.update('a', { x: 5 })
+    s.update('a', { x: 0 })
+    s.endBatch()
+    expect(s.undos.length).toBe(n)
+    s.update('a', { x: 9 })
+    s.undo()
+    expect(s.get('a').x).toBe(0)
+  })
+
   it('undoes and redoes a put', () => {
     const s = new Store()
     s.put(shape('a'))

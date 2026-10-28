@@ -4,6 +4,14 @@ All notable changes to the `@quickdrawjs/*` packages are documented here.
 The project follows [semver](https://semver.org); the three packages are
 versioned in lockstep.
 
+## Unreleased
+
+- Undo never seems to do nothing: an edit that ends where it began (a drag
+  back to the start, a style set to what it was) leaves no undo step.
+- Holding an arrow key moves the selection as one undo step.
+- ⌘Z in the middle of a drag ends the drag first, so the undo takes back all
+  of it.
+
 ## 0.3.0 — 2026-10-12
 
 - Text is set in Libre Baskerville, bundled with the engine (SIL OFL 1.1),

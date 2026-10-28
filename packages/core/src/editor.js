@@ -514,7 +514,7 @@ export class Editor {
     c.addEventListener('paste', this._onPaste)
     // losing focus mid-gesture (a host app may reclaim the space key by
     // blurring the board) must not leave a sticky space-pan behind
-    this._onBlur = () => { this.spaceHeld = false; this._syncCursor() }
+    this._onBlur = () => { this.spaceHeld = false; this._endNudge(); this._syncCursor() }
     c.addEventListener('blur', this._onBlur)
     this._ro = new ResizeObserver(() => this.requestRender())
     this._ro.observe(c)
@@ -534,6 +534,7 @@ export class Editor {
     if (e.target !== this.canvas && e.target !== this.overlay && e.target !== this.container) return
     if (e.button === 2) return
     if (e.pointerType !== 'mouse' && e.cancelable !== false) e.preventDefault()
+    this._endNudge()
     if (this.editing) this._commitText()
     this.container.focus({ preventScroll: true })
     const s = this._evPoint(e)
@@ -1371,7 +1372,14 @@ export class Editor {
       e.preventDefault()
       return
     }
-    if (meta && k === 'z') { e.preventDefault(); e.shiftKey ? this.store.redo() : this.store.undo(); return }
+    if (!k.startsWith('arrow')) this._endNudge()
+    if (meta && k === 'z') {
+      e.preventDefault()
+      // a drag still going ends where it is first, so the undo takes back the whole of it
+      if (this.session) this._cancelSession()
+      e.shiftKey ? this.store.redo() : this.store.undo()
+      return
+    }
     if (meta && k === 'a') { e.preventDefault(); this.selectAll(); return }
     if (meta && k === 'd') { e.preventDefault(); this.duplicateSelection(); return }
     if (meta && k === 'c') { e.preventDefault(); this.copySelection(); return }
@@ -1406,6 +1414,11 @@ export class Editor {
       const dy = k === 'arrowup' ? -d : k === 'arrowdown' ? d : 0
       if (this.selection.size) {
         e.preventDefault()
+        // a held arrow key is one move, one undo step, until it's let go
+        if (!this._nudging && !this.session && !this.store._batch) {
+          this._nudging = true
+          this.store.beginBatch()
+        }
         this.store.transact(() => {
           for (const id of this.selection) {
             const s = this.store.get(id)
@@ -1436,6 +1449,12 @@ export class Editor {
   }
   _keyUp(e) {
     if (e.key === ' ') { this.spaceHeld = false; this._syncCursor() }
+    if (e.key.startsWith('Arrow')) this._endNudge()
+  }
+  _endNudge() {
+    if (!this._nudging) return
+    this._nudging = false
+    this.store.endBatch()
   }
   _zoomCenter(mult) {
     const { w, h } = this.viewSize()

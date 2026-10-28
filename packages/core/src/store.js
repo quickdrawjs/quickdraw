@@ -47,6 +47,25 @@ export const composeDiff = (a, b) => {
   return out
 }
 
+// two records hold the same values (records are plain JSON)
+const sameValue = (a, b) => {
+  if (a === b) return true
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false
+  const ka = Object.keys(a)
+  if (ka.length !== Object.keys(b).length) return false
+  for (const k of ka) if (!sameValue(a[k], b[k])) return false
+  return true
+}
+
+// the diff without the updates that end where they began: a drag back to the
+// start, a style set to what it was. Undo history keeps only real changes, so
+// an undo never seems to do nothing.
+export const netDiff = (d) => {
+  const updated = {}
+  for (const [id, pair] of Object.entries(d.updated)) if (!sameValue(pair[0], pair[1])) updated[id] = pair
+  return { added: d.added, removed: d.removed, updated }
+}
+
 // ---- the wire: diffs for a live peer ------------------------------------------
 // A stroke grows one diff per pointer move, and each diff carries the whole
 // record before and after — on a slow link that's the stroke sent again and
@@ -191,12 +210,10 @@ export class Store {
       this._tx = null
       if (!isDiffEmpty(diff)) {
         if (source === 'user' && !this._applyingHistory) {
-          if (this._batch) this._batch = composeDiff(this._batch, diff)
-          else {
-            this.undos.push(diff)
-            if (this.undos.length > 256) this.undos.shift()
-          }
-          this.redos.length = 0
+          if (this._batch) {
+            this._batch = composeDiff(this._batch, diff)
+            this.redos.length = 0
+          } else this._pushUndo(diff)
         }
         this._emit(diff, source)
         if (source === 'user') this._notifyHistory()
@@ -258,12 +275,16 @@ export class Store {
   endBatch() {
     const b = this._batch
     this._batch = null
-    if (b && !isDiffEmpty(b)) {
-      this.undos.push(b)
-      if (this.undos.length > 256) this.undos.shift()
-      this.redos.length = 0
-      this._notifyHistory()
-    }
+    if (b && this._pushUndo(b)) this._notifyHistory()
+  }
+  // one undo step, if it changes anything
+  _pushUndo(diff) {
+    const d = netDiff(diff)
+    if (isDiffEmpty(d)) return false
+    this.undos.push(d)
+    if (this.undos.length > 256) this.undos.shift()
+    this.redos.length = 0
+    return true
   }
 
   get canUndo() { return this.undos.length > 0 }

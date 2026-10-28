@@ -190,6 +190,32 @@ describe('selection & transforms', () => {
     expect([...editor.selection]).toEqual([a.id])
   })
 
+  it('a held arrow key moves the selection as one undo step', () => {
+    const a = makeRect(10, 10)
+    editor.setSelection([a.id])
+    const undosBefore = editor.store.undos.length
+    const key = { key: 'ArrowRight', shiftKey: false, metaKey: false, ctrlKey: false, preventDefault() {} }
+    for (let i = 0; i < 10; i++) editor._keyDown(key)
+    editor._keyUp(key)
+    expect(editor.store.get(a.id).x).toBeCloseTo(a.x + 40)
+    expect(editor.store.undos.length).toBe(undosBefore + 1)
+    editor.store.undo()
+    expect(editor.store.get(a.id).x).toBeCloseTo(a.x)
+  })
+
+  it('undo in the middle of a drag takes back the whole drag', () => {
+    const a = makeRect(10, 10)
+    editor.setSelection([a.id])
+    pid++
+    editor._pointerDown({ ...ev(30, 14), target: editor.canvas })
+    editor._pointerMove({ ...ev(50, 30), target: editor.canvas })
+    editor._pointerMove({ ...ev(70, 64), target: editor.canvas })
+    editor._keyDown({ key: 'z', metaKey: true, shiftKey: false, ctrlKey: false, preventDefault() {} })
+    editor._pointerMove({ ...ev(90, 90), target: editor.canvas })
+    editor._pointerUp({ ...ev(90, 90), target: editor.canvas })
+    expect(editor.store.get(a.id).x).toBeCloseTo(a.x)
+  })
+
   it('dragging a selected shape translates it (one undo step)', () => {
     const a = makeRect(10, 10)
     editor.setSelection([a.id])
