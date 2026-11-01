@@ -551,6 +551,95 @@ describe('export', () => {
   })
 })
 
+describe('clipboard', () => {
+  const RealImage = globalThis.Image
+  const realCreate = URL.createObjectURL
+  const realRevoke = URL.revokeObjectURL
+  afterEach(() => {
+    globalThis.Image = RealImage
+    try {
+      URL.createObjectURL = realCreate
+      URL.revokeObjectURL = realRevoke
+    } catch {}
+    Editor.localClipboard = null
+  })
+
+  const pngBlob = () => new Blob(['fake-png-bytes'], { type: 'image/png' })
+  // readImage decodes through Image + object URLs: stub both
+  const stubImageDecode = (w = 64, h = 48) => {
+    URL.createObjectURL = () => 'blob:fake'
+    URL.revokeObjectURL = () => {}
+    globalThis.Image = class {
+      set src(v) {
+        this.width = w
+        this.height = h
+        setTimeout(() => this.onload && this.onload(), 0)
+      }
+    }
+  }
+  const pasteEvent = (clipboardData) => ({ clipboardData, preventDefault() {} })
+  const geoInStore = () => {
+    editor.store.put({
+      id: 's1', typeName: 'shape', type: 'geo', x: 10, y: 10, rot: 0, z: 1,
+      props: { geo: 'rectangle', w: 40, h: 40, color: 'black', size: 'm', dash: 'solid', fill: 'none' },
+    })
+    editor.setSelection(['s1'])
+  }
+  const flush = () => new Promise((r) => setTimeout(r, 30))
+
+  it('copies and pastes shapes from memory with no clipboard API', async () => {
+    expect(navigator.clipboard).toBe(undefined) // jsdom: proves no system API
+    geoInStore()
+    await editor.copySelection()
+    expect(Editor.localClipboard?.shapes.length).toBe(1)
+    await editor._paste(pasteEvent({ files: [], items: [], getData: () => '' }))
+    const xs = editor.store.shapes().filter((s) => s.type === 'geo').map((s) => s.x).sort((a, b) => a - b)
+    expect(xs).toEqual([10, 26]) // pasted copy lands offset +16
+  })
+
+  it('pastes image files from the paste event', async () => {
+    stubImageDecode()
+    await editor._paste(pasteEvent({ files: [pngBlob()], items: [] }))
+    await flush()
+    const imgs = editor.store.shapes().filter((s) => s.type === 'image')
+    expect(imgs.length).toBe(1)
+    expect(editor.store.asset(imgs[0].props.assetId)?.src.startsWith('data:image/png')).toBe(true)
+  })
+
+  it('pastes raw image data via items.getAsFile (screenshots)', async () => {
+    stubImageDecode()
+    const blob = pngBlob()
+    await editor._paste(pasteEvent({ files: [], items: [{ type: 'image/png', getAsFile: () => blob }] }))
+    await flush()
+    expect(editor.store.shapes().filter((s) => s.type === 'image').length).toBe(1)
+  })
+
+  it('pastes quickdraw payloads from text when nothing else applies', async () => {
+    const payload = JSON.stringify({
+      quickdraw: 1,
+      shapes: [{
+        id: 'x', typeName: 'shape', type: 'geo', x: 0, y: 0, rot: 0, z: 5,
+        props: { geo: 'rectangle', w: 10, h: 10, color: 'black', size: 'm', dash: 'solid', fill: 'none' },
+      }],
+      assets: {},
+    })
+    await editor._paste(pasteEvent({ files: [], items: [], getData: (t) => (t === 'text/plain' ? payload : '') }))
+    const pasted = editor.store.shapes().filter((s) => s.type === 'geo')
+    expect(pasted.length).toBe(1)
+    expect(pasted[0].id).not.toBe('x')
+    expect(pasted[0].x).toBe(16)
+  })
+
+  it('Cmd+V is left to the native paste event', () => {
+    let prevented = false
+    editor._keyDown({
+      key: 'v', metaKey: true, ctrlKey: false, shiftKey: false,
+      preventDefault: () => { prevented = true },
+    })
+    expect(prevented).toBe(false)
+  })
+})
+
 describe('events & lifecycle', () => {
   it('emits change/selection/tool events and unsubscribes cleanly', () => {
     const changes = vi.fn(), sel = vi.fn(), tool = vi.fn()
