@@ -145,8 +145,23 @@ export function pageBounds(shape: ShapeRecord): Bounds
 export function drawShape(
   ctx: CanvasRenderingContext2D,
   shape: ShapeRecord,
-  opts: { theme: Theme; store: Store; zoom?: number; ghost?: boolean; onAssetLoad?: () => void }
+  opts: {
+    theme: Theme; store: Store; zoom?: number; ghost?: boolean; onAssetLoad?: () => void;
+    hideText?: string | null;
+    Path2D?: new () => Path2D;
+    images?: Map<string, CanvasImageSource | null>;
+    patternCache?: Map<string, CanvasPattern | null>;
+  }
 ): void
+/** Render order: highlighters first (each group by z, ties by id). */
+export function sortShapesForRender(shapes: ShapeRecord[]): ShapeRecord[]
+/**
+ * Inject a non-browser rendering backend (Node/Skia). Never patches
+ * window/document globals; the browser never calls this.
+ */
+export function setShapePlatform(p: { Path2D?: any; measureCtx?: any; tileCanvas?: ((w: number, h: number) => any) | null }): unknown
+/** Clear a backend previously installed with setShapePlatform. */
+export function resetShapePlatform(): void
 /** Point hit-test in page space. */
 export function hitShape(shape: ShapeRecord, px: number, py: number, tol: number, store: Store): boolean
 
