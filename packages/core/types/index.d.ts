@@ -99,6 +99,7 @@ export const COLOR_IDS: ColorId[]
 export const SIZE_IDS: SizeId[]
 export const DASH_IDS: DashId[]
 export const FILL_IDS: FillId[]
+export const FONT_IDS: FontId[]
 export const GEO_IDS: GeoId[]
 export const GRID_IDS: GridId[]
 export const THEMES: Record<ThemeId, Theme>
