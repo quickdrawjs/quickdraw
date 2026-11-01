@@ -52,6 +52,26 @@ describe('setup', () => {
     expect(TOOLS).toContain('draw')
   })
 
+  it('disablePanScroll passes plain scroll through but keeps pinch-zoom', () => {
+    const embed = new Editor({ container: document.createElement('div'), disablePanScroll: true })
+    const before = { ...embed.camera }
+    let prevented = false
+    embed._wheel({ deltaX: 0, deltaY: 100, ctrlKey: false, metaKey: false, preventDefault: () => { prevented = true } })
+    expect(embed.camera).toEqual(before)
+    expect(prevented).toBe(false)
+    // ...but pinch-zoom still captures and zooms
+    const zBefore = embed.camera.z
+    embed._wheel({ clientX: 50, clientY: 50, deltaX: 0, deltaY: -100, ctrlKey: true, metaKey: false, preventDefault: () => { prevented = true } })
+    expect(embed.camera.z).toBeGreaterThan(zBefore)
+    expect(prevented).toBe(true)
+    embed.destroy()
+    // default captures: pans and prevents default
+    const before2 = { ...editor.camera }
+    editor._wheel({ clientX: 50, clientY: 50, deltaX: 10, deltaY: 0, ctrlKey: false, metaKey: false, preventDefault: () => { prevented = true } })
+    expect(editor.camera).not.toEqual(before2)
+    expect(prevented).toBe(true)
+  })
+
   it('camera math round-trips', () => {
     editor.setCamera({ x: 50, y: -20, z: 2 })
     const p = editor.screenToPage(100, 100)
