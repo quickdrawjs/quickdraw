@@ -6,8 +6,8 @@ export { Editor, TOOLS } from './editor.js'
 export { Store, newId, isDiffEmpty, invertDiff, composeDiff, packDiff, unpackDiff, streamDiffs } from './store.js'
 export { buildUI } from './ui.js'
 export {
-  themeOf, THEMES, COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, GEO_IDS, GRID_IDS,
-  SIZES, FONT_SIZES, FONTS,
+  themeOf, THEMES, COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, FONT_IDS, GEO_IDS, GRID_IDS,
+  SIZES, FONT_SIZES, FONTS, setFontStacks, resetFontStacks, fontStackOf,
 } from './palette.js'
 export { pageBounds, localBounds, drawShape, hitShape } from './shapes.js'
 export { strokeOutline, inkOptions } from './freehand.js'

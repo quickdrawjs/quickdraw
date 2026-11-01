@@ -4,7 +4,7 @@
 // Dependency-free ESM: runs in any modern browser as-is, no build step.
 
 import { Store, newId } from './store.js'
-import { themeOf, SIZES, FONT_SIZES, FONTS, GEO_IDS, COLOR_IDS, GRID_IDS, GRID_STEP, GRID_BAND, GRID_MAJOR } from './palette.js'
+import { themeOf, SIZES, FONT_SIZES, FONTS, GEO_IDS, COLOR_IDS, GRID_IDS, GRID_STEP, GRID_BAND, GRID_MAJOR, fontStackOf } from './palette.js'
 import {
   localBounds, pageBounds, toLocal, drawShape, hitShape, marqueeHits,
   scaleShape, textLayout, noteLayout, NOTE_W, sampleLinePts, resetTextLayouts,
@@ -1084,7 +1084,7 @@ export class Editor {
     } else if (shape.type === 'geo' && ed.field === 'label') {
       const p = shape.props
       const fs = FONT_SIZES[p.labelSize || 's'] * (p.labelScale || 1)
-      const fam = FONTS[p.font || 'draw']
+      const fam = fontStackOf(p.font || 'draw')
       pos = this.pageToScreen(shape.x + 8, shape.y + 8)
       w = p.w - 16
       h = p.h - 16

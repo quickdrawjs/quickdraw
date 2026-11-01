@@ -5,7 +5,8 @@
 // Dependency-free ESM (see palette.js).
 
 import {
-  SIZES, INK_SIZES, FONT_SIZES, NOTE_FONT_SIZES, FONTS, HIGHLIGHT_ALPHA, HIGHLIGHT_SCALE,
+  SIZES, INK_SIZES, FONT_SIZES, NOTE_FONT_SIZES, HIGHLIGHT_ALPHA, HIGHLIGHT_SCALE,
+  fontStackOf,
 } from './palette.js'
 import {
   ptsBounds, rotWith, distToPolyline, pointInPolygon, pointInEllipse,
@@ -159,7 +160,7 @@ export function textLayout(shape) {
   const hit = layoutCache.get(p)
   if (hit) return hit
   const fontSize = FONT_SIZES[p.size] * (p.scale || 1)
-  const font = FONTS[p.font || 'draw']
+  const font = fontStackOf(p.font || 'draw')
   const lh = fontSize * 1.32
   const maxW = p.autosize === false && p.w ? p.w : 0
   const lines = wrapLines(p.text, font, fontSize, maxW)
@@ -174,7 +175,7 @@ export function noteLayout(shape) {
   const hit = layoutCache.get(p)
   if (hit) return hit
   const fontSize = NOTE_FONT_SIZES[p.size]
-  const font = FONTS[p.font || 'draw']
+  const font = fontStackOf(p.font || 'draw')
   const lh = fontSize * 1.35
   const lines = wrapLines(p.text, font, fontSize, NOTE_W - NOTE_PAD * 2)
   const textH = lines.length * lh
@@ -190,7 +191,7 @@ function geoLabelLayout(shape) {
   let hit = layoutCache.get(key)
   if (hit) return hit
   const fontSize = FONT_SIZES[p.labelSize || 's'] * (p.labelScale || 1)
-  const font = FONTS[p.font || 'draw']
+  const font = fontStackOf(p.font || 'draw')
   const lh = fontSize * 1.3
   const lines = wrapLines(p.label, font, fontSize, Math.max(24, p.w - LABEL_PAD * 2))
   hit = { lines, fontSize, font, lh, textH: lines.length * lh }
