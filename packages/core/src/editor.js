@@ -8,6 +8,7 @@ import { themeOf, SIZES, FONT_SIZES, FONTS, GEO_IDS, COLOR_IDS, GRID_IDS, GRID_S
 import {
   localBounds, pageBounds, toLocal, drawShape, hitShape, marqueeHits,
   scaleShape, textLayout, noteLayout, NOTE_W, sampleLinePts, resetTextLayouts,
+  sortShapesForRender,
 } from './shapes.js'
 import { boundsUnion, boundsExpand, boundsContain, clamp, rotWith } from './geometry.js'
 
@@ -463,14 +464,8 @@ export class Editor {
   }
 
   shapesSorted() {
-    // highlighter lives under the ink, like on paper — highlights render
-    // first (in their own z order), everything else above
-    return this.store.shapes().sort(
-      (a, b) =>
-        (a.type === 'highlight' ? 0 : 1) - (b.type === 'highlight' ? 0 : 1) ||
-        a.z - b.z ||
-        (a.id < b.id ? -1 : 1)
-    )
+    // order lives in shapes.js so out-of-tree exporters render identically
+    return sortShapesForRender(this.store.shapes())
   }
   hitTest(px, py) {
     const tol = 8 / this.camera.z

@@ -15,6 +15,42 @@ import {
 } from './geometry.js'
 import { strokeOutline, inkOptions } from './freehand.js'
 
+// ---- rendering platform -----------------------------------------------------
+// The engine draws with the browser's canvas stack by default (global Path2D,
+// OffscreenCanvas/document canvases, Image, canvas text measurement).
+// Non-browser renderers (e.g. a server-side exporter) inject native
+// equivalents explicitly via setShapePlatform() — never by patching
+// window/document/Path2D/Image, which this module does not touch. The
+// browser never calls setShapePlatform, so its path is unchanged. Only
+// stateless backend pieces live here (a Path2D class, a shared measure
+// context, a tile-canvas factory); per-render state such as decoded images
+// and hatch patterns travels on drawShape's opts.
+const shapePlatform = { Path2D: null, measureCtx: null, tileCanvas: null }
+export function setShapePlatform(p = {}) {
+  if (p.Path2D !== undefined) shapePlatform.Path2D = p.Path2D
+  if (p.measureCtx !== undefined) shapePlatform.measureCtx = p.measureCtx
+  if (p.tileCanvas !== undefined) shapePlatform.tileCanvas = p.tileCanvas
+  return shapePlatform
+}
+export function resetShapePlatform() {
+  shapePlatform.Path2D = null
+  shapePlatform.measureCtx = null
+  shapePlatform.tileCanvas = null
+}
+// Per-call opts win, then the injected platform, then the browser global.
+const path2DFor = (opts) => opts?.Path2D ?? shapePlatform.Path2D ?? globalThis.Path2D
+
+// Render order, shared by the editor and out-of-tree exporters so they cannot
+// drift: highlighters soak into the paper beneath the ink, like on a real
+// page — highlights render first (in their own z order), everything else
+// above, ties broken by id.
+export const sortShapesForRender = (shapes) => [...shapes].sort(
+  (a, b) =>
+    (a.type === 'highlight' ? 0 : 1) - (b.type === 'highlight' ? 0 : 1) ||
+    a.z - b.z ||
+    (a.id < b.id ? -1 : 1),
+)
+
 export const NOTE_W = 200
 const NOTE_PAD = 20
 const LABEL_PAD = 12
@@ -99,6 +135,7 @@ let layoutCache = new WeakMap() // text/note/geo-label props -> layout
 
 let measureCtx = null
 const measurer = () => {
+  if (shapePlatform.measureCtx) return shapePlatform.measureCtx
   if (!measureCtx) measureCtx = (typeof OffscreenCanvas !== 'undefined'
     ? new OffscreenCanvas(1, 1)
     : document.createElement('canvas')).getContext('2d')
@@ -243,12 +280,14 @@ export function geoOutline(shape) {
   return { smooth: false, pts: bowPolygon(geoPolygon(p.geo, w, h), shape.id) }
 }
 
-// polygon path (hand-drawn for 'draw' dash), cached per props object
-function geoPath(shape) {
+// polygon path (hand-drawn for 'draw' dash), cached per props object.
+// opts (drawShape's) may carry an injected Path2D for non-browser backends.
+function geoPath(shape, opts) {
   const p = shape.props
   let path = geoPathCache.get(p)
   if (path) return path
-  path = new Path2D()
+  const P2D = path2DFor(opts)
+  path = new P2D()
   if (p.dash === 'draw') {
     const { smooth, pts } = geoOutline(shape)
     if (smooth) traceSmooth(path, pts, true)
@@ -277,13 +316,17 @@ function geoPath(shape) {
   return path
 }
 
-const patternCache = new Map() // `${color}|${theme}` -> CanvasPattern
-function hatchPattern(ctx, colorHex, themeId) {
+const patternCache = new Map() // `${color}|${theme}` -> CanvasPattern (browser default)
+function hatchPattern(ctx, colorHex, themeId, opts) {
+  const cache = opts?.patternCache ?? patternCache
   const key = colorHex + '|' + themeId
-  let pat = patternCache.get(key)
+  let pat = cache.get(key)
   if (pat) return pat
-  const c = document.createElement('canvas')
-  c.width = c.height = 8
+  const c = shapePlatform.tileCanvas
+    ? shapePlatform.tileCanvas(8, 8)
+    : (typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(8, 8)
+      : (() => { const el = document.createElement('canvas'); el.width = el.height = 8; return el })())
   const pctx = c.getContext('2d')
   pctx.strokeStyle = colorHex
   pctx.globalAlpha = 0.55
@@ -294,14 +337,14 @@ function hatchPattern(ctx, colorHex, themeId) {
   pctx.moveTo(2, 10); pctx.lineTo(10, 2)
   pctx.stroke()
   pat = ctx.createPattern(c, 'repeat')
-  patternCache.set(key, pat)
+  cache.set(key, pat)
   return pat
 }
 
-function fillPath(ctx, path, p, theme) {
+function fillPath(ctx, path, p, theme, opts) {
   if (!p.fill || p.fill === 'none') return
   if (p.fill === 'semi') ctx.fillStyle = SEMI[theme.id]
-  else if (p.fill === 'pattern') ctx.fillStyle = hatchPattern(ctx, theme.colors[p.color].stroke, theme.id)
+  else if (p.fill === 'pattern') ctx.fillStyle = hatchPattern(ctx, theme.colors[p.color].stroke, theme.id, opts)
   else ctx.fillStyle = theme.colors[p.color].fill
   ctx.fill(path)
 }
@@ -321,13 +364,13 @@ function drawLabel(ctx, layout, color, w, h) {
 
 // the freehand outline as a Path2D, cached; live strokes (done !== true)
 // rebuild every frame so the ink grows under the pen
-function drawPath(shape) {
+function drawPath(shape, opts) {
   const p = shape.props
   if (p.done) {
     const hit = outlineCache.get(p)
     if (hit) return hit
   }
-  const path = new Path2D()
+  const path = new (path2DFor(opts))()
   const outline = strokeOutline(p.pts, inkOptions(INK_SIZES[p.size], { isPen: !!p.isPen, done: !!p.done }))
   traceSmooth(path, outline, true)
   path.closePath()
@@ -343,7 +386,9 @@ function inkReach(size) {
 
 // Draw one shape. ctx is already in PAGE space (camera applied by caller);
 // this applies the shape's own translate/rotate.
-// opts: { theme, store, zoom, onAssetLoad, ghost }
+// opts: { theme, store, zoom, onAssetLoad, ghost, hideText,
+//         Path2D (injected path class), images (Map assetId -> decoded image,
+//         when present the browser loader is bypassed), patternCache (Map) }
 export function drawShape(ctx, shape, opts) {
   const { theme } = opts
   const p = shape.props
@@ -377,7 +422,7 @@ export function drawShape(ctx, shape, opts) {
         ctx.setLineDash([])
       } else {
         ctx.fillStyle = col.stroke
-        ctx.fill(drawPath(shape))
+        ctx.fill(drawPath(shape, opts))
       }
       break
     }
@@ -398,8 +443,8 @@ export function drawShape(ctx, shape, opts) {
       break
     }
     case 'geo': {
-      const path = geoPath(shape)
-      fillPath(ctx, path, p, theme)
+      const path = geoPath(shape, opts)
+      fillPath(ctx, path, p, theme, opts)
       ctx.strokeStyle = col.stroke
       strokeStyled(ctx, p.dash, SIZES[p.size])
       ctx.stroke(path)
@@ -484,7 +529,11 @@ export function drawShape(ctx, shape, opts) {
       break
     }
     case 'image': {
-      const img = assetImage(opts.store, p.assetId, opts.onAssetLoad)
+      // Non-browser renderers pass opts.images (pre-decoded per render) and
+      // never touch the browser loader; the browser passes no images map.
+      const img = opts.images
+        ? (opts.images.get(p.assetId) ?? null)
+        : assetImage(opts.store, p.assetId, opts.onAssetLoad)
       if (img) {
         ctx.beginPath()
         ctx.roundRect(0, 0, p.w, p.h, 4)
