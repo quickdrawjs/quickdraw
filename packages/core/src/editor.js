@@ -35,12 +35,17 @@ const bendMidpoint = (pr) => {
 }
 
 export class Editor {
-  constructor({ container, store, theme = 'light', grid = 'lines', readonly = false, camera, styles, geoKind } = {}) {
+  constructor({ container, store, theme = 'light', grid = 'lines', readonly = false, camera, styles, geoKind, disablePanScroll = false } = {}) {
     this.container = container
     this.store = store || new Store()
     this.theme = themeOf(theme)
     this.grid = GRID_IDS.includes(grid) ? grid : 'lines'
     this.readonly = !!readonly
+    // Opt-in embed mode: plain wheel events pass through to the page instead
+    // of panning, while pinch-zoom (Ctrl/Meta+wheel) zooms the board instead
+    // of the page. Pointer tools (including the hand tool's drag-pan) are
+    // unaffected either way.
+    this.disablePanScroll = !!disablePanScroll
     this.camera = camera || { x: 0, y: 0, z: 1 }
     this.styles = { ...DEFAULT_STYLES, ...(styles || {}) }
     this.geoKind = geoKind || 'rectangle'
@@ -1463,6 +1468,9 @@ export class Editor {
 
   _wheel(e) {
     if (this.readonly) return
+    // Embed mode: plain scroll belongs to the page — but pinch-zoom still
+    // zooms the board, since the browser would page-zoom without the capture.
+    if (this.disablePanScroll && !(e.ctrlKey || e.metaKey)) return
     e.preventDefault()
     const s = this._evPoint(e)
     if (e.ctrlKey || e.metaKey) {

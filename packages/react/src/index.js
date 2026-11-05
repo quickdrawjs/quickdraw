@@ -40,6 +40,7 @@ export const Quickdraw = forwardRef(function Quickdraw(props, ref) {
     grid = 'lines',
     readonly = false,
     hideUi = false,
+    disablePanScroll = false,
     themeToggle = true,
     gridControl = true,
     watermark = true,
@@ -77,6 +78,7 @@ export const Quickdraw = forwardRef(function Quickdraw(props, ref) {
       theme,
       grid,
       readonly,
+      disablePanScroll,
       camera,
       styles,
     })
@@ -165,6 +167,10 @@ export const Quickdraw = forwardRef(function Quickdraw(props, ref) {
     editor.setReadonly(readonly)
     uiRef.current?.setHidden(hideUi || readonly)
   }, [readonly, hideUi])
+
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.disablePanScroll = !!disablePanScroll
+  }, [disablePanScroll])
 
   useEffect(() => {
     uiRef.current?.setOptions({ themeToggle, gridControl })
