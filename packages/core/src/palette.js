@@ -105,6 +105,7 @@ export const NOTE_FONT_SIZES = { s: 16, m: 20, l: 26, xl: 32 }
 
 export const DASH_IDS = ['draw', 'solid', 'dashed', 'dotted']
 export const FILL_IDS = ['none', 'semi', 'solid', 'pattern']
+export const FONT_IDS = ['draw', 'sans', 'serif', 'mono']
 
 export const FONTS = {
   // 'Quickdraw Hand' is Libre Baskerville, bundled via quickdraw.css; the rest are
@@ -114,6 +115,26 @@ export const FONTS = {
   serif: "'Iowan Old Style', 'New York', Palatino, Georgia, serif",
   mono: "'SF Mono', ui-monospace, Menlo, monospace",
 }
+
+// Pluggable font stacks: remap any style id to a full CSS font-family stack
+// (or register a brand-new id) — `setFontStacks({ sans: "'Inter', ..." })`.
+// Everything that measures or draws type resolves through fontStackOf(), so
+// one call reconfigures the editor, the UI previews and headless export
+// alike. Process-global, like the backend injection: configure once at
+// startup. Custom ids work anywhere a `font` prop is read.
+const fontOverrides = {}
+export function setFontStacks(stacks = {}) {
+  for (const [id, stack] of Object.entries(stacks)) {
+    if (typeof id !== 'string' || !id) throw new TypeError('font id must be a non-empty string')
+    if (typeof stack !== 'string' || !stack.trim()) throw new TypeError(`font stack for '${id}' must be a non-empty CSS font-family string`)
+    fontOverrides[id] = stack
+  }
+  return { ...fontOverrides }
+}
+export function resetFontStacks() {
+  for (const k of Object.keys(fontOverrides)) delete fontOverrides[k]
+}
+export const fontStackOf = (id) => fontOverrides[id] ?? FONTS[id] ?? FONTS.draw
 
 export const GEO_IDS = ['rectangle', 'ellipse', 'triangle', 'diamond', 'hexagon', 'star', 'cloud']
 

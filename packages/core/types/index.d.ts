@@ -13,7 +13,7 @@ export type ColorId =
 export type SizeId = 's' | 'm' | 'l' | 'xl'
 export type DashId = 'draw' | 'solid' | 'dashed' | 'dotted'
 export type FillId = 'none' | 'semi' | 'solid' | 'pattern'
-export type FontId = 'draw' | 'sans' | 'serif' | 'mono'
+export type FontId = 'draw' | 'sans' | 'serif' | 'mono' | (string & {})
 export type GeoId = 'rectangle' | 'ellipse' | 'triangle' | 'diamond' | 'hexagon' | 'star' | 'cloud'
 export type ThemeId = 'light' | 'dark'
 export type GridId = 'none' | 'lines' | 'ruled' | 'dots' | 'crosses' | 'iso'
@@ -105,6 +105,17 @@ export const THEMES: Record<ThemeId, Theme>
 export const SIZES: Record<SizeId, number>
 export const FONT_SIZES: Record<SizeId, number>
 export const FONTS: Record<FontId, string>
+/**
+ * Remap font style ids to full CSS font-family stacks (or register new ids):
+ * setFontStacks({ sans: "'Inter', system-ui, sans-serif" }). One call
+ * reconfigures measurement, drawing, the editor textarea and UI previews.
+ * Process-global: configure once at startup.
+ */
+export function setFontStacks(stacks: Record<string, string>): Record<string, string>
+/** Clear all custom font stacks set with setFontStacks. */
+export function resetFontStacks(): void
+/** Resolve a font style id to its stack (custom override, bundled default, else draw). */
+export function fontStackOf(id?: string): string
 
 export function themeOf(id?: string): Theme
 export function newId(prefix?: string): string
