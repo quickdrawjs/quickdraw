@@ -551,6 +551,25 @@ describe('export', () => {
   })
 })
 
+describe('render order', () => {
+  it('paints images beneath highlighters beneath everything else, whatever the z-index', () => {
+    const shape = (id, type, z) => ({ id, typeName: 'shape', type, x: 0, y: 0, rot: 0, z, props: {} })
+    editor.store.put(shape('geo-hi', 'geo', 99))
+    editor.store.put(shape('hl-lo', 'highlight', 1))
+    editor.store.put(shape('img-mid', 'image', 50))
+    expect(editor.shapesSorted().map((s) => s.id)).toEqual(['img-mid', 'hl-lo', 'geo-hi'])
+  })
+
+  it('orders within each layer by z, ties by id', () => {
+    const shape = (id, type, z) => ({ id, typeName: 'shape', type, x: 0, y: 0, rot: 0, z, props: {} })
+    editor.store.put(shape('b', 'geo', 2))
+    editor.store.put(shape('a', 'geo', 1))
+    editor.store.put(shape('d', 'image', 9))
+    editor.store.put(shape('c', 'image', 3))
+    expect(editor.shapesSorted().map((s) => s.id)).toEqual(['c', 'd', 'a', 'b'])
+  })
+})
+
 describe('events & lifecycle', () => {
   it('emits change/selection/tool events and unsubscribes cleanly', () => {
     const changes = vi.fn(), sel = vi.fn(), tool = vi.fn()
