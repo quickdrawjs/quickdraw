@@ -6,7 +6,7 @@
 // the standard set users already know.
 // Dependency-free ESM (see palette.js).
 
-import { COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, GEO_IDS, GRID_IDS, THEMES } from './palette.js'
+import { COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, FONT_IDS, GEO_IDS, GRID_IDS, THEMES, FONTS } from './palette.js'
 
 const SVG = (inner) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
@@ -281,6 +281,15 @@ export function buildUI(editor, { hidden = false, onSave, themeToggle = true, gr
       b.addEventListener('click', (e) => { e.stopPropagation(); editor.setStyle('fill', f); restyle() })
       fills.appendChild(b)
     }
+    const fonts = row('qd-fonts')
+    const FONT_LABELS = { draw: 'Hand', sans: 'Sans', serif: 'Serif', mono: 'Mono' }
+    for (const f of FONT_IDS) {
+      const b = el('button', 'qd-opt' + (cur.font === f ? ' on' : ''))
+      b.title = 'font: ' + (FONT_LABELS[f] || f)
+      b.innerHTML = `<span style="font-family:${FONTS[f]}">Ag</span>`
+      b.addEventListener('click', (e) => { e.stopPropagation(); editor.setStyle('font', f); restyle() })
+      fonts.appendChild(b)
+    }
     // opacity: one slider, 10–100%. A drag is a single undo step.
     const opac = row('qd-opacity')
     opac.innerHTML = '<span class="qd-opacity-label">Opacity</span><input type="range" min="10" max="100" step="5" aria-label="Opacity"><span class="qd-opacity-val"></span>'
@@ -310,6 +319,7 @@ export function buildUI(editor, { hidden = false, onSave, themeToggle = true, gr
       sizes.querySelectorAll('.qd-opt').forEach((b, i) => b.classList.toggle('on', SIZE_IDS[i] === c2.size))
       dashes.querySelectorAll('.qd-opt').forEach((b, i) => b.classList.toggle('on', DASH_IDS[i] === c2.dash))
       fills.querySelectorAll('.qd-opt').forEach((b, i) => b.classList.toggle('on', FILL_IDS[i] === c2.fill))
+      fonts.querySelectorAll('.qd-opt').forEach((b, i) => b.classList.toggle('on', FONT_IDS[i] === c2.font))
       showOpacity(c2.opacity)
       refresh()
     }
