@@ -1384,7 +1384,9 @@ export class Editor {
     if (meta && k === 'd') { e.preventDefault(); this.duplicateSelection(); return }
     if (meta && k === 'c') { e.preventDefault(); this.copySelection(); return }
     if (meta && k === 'x') { e.preventDefault(); this.copySelection().then(() => this.deleteSelection()); return }
-    if (meta && k === 'v') { e.preventDefault(); this.pasteFromClipboard(); return }
+    // Cmd/Ctrl+V is deliberately NOT intercepted: the native paste event
+    // carries file and image data the async clipboard API cannot see (and
+    // needs no permissions), so _paste handles every paste uniformly.
     if (meta && (k === '=' || k === '+')) { e.preventDefault(); this._zoomCenter(1.25); return }
     if (meta && k === '-') { e.preventDefault(); this._zoomCenter(1 / 1.25); return }
     if (k === 'escape') {
@@ -1488,6 +1490,11 @@ export class Editor {
   }
 
   // ---- clipboard / images --------------------------------------------------
+  // Same-page clipboard: copy/paste without touching the system clipboard —
+  // no permissions, works offline and when clipboard access is blocked. A
+  // class-level slot (not per instance) so boards on one page exchange
+  // shapes; the payload is the same envelope copySelection writes out.
+  static localClipboard = null
   async copySelection() {
     if (!this.selection.size) return
     const shapes = []
@@ -1501,12 +1508,15 @@ export class Editor {
         if (a) assets[a.id] = a
       }
     }
+    Editor.localClipboard = { quickdraw: 1, shapes, assets }
     try {
-      await navigator.clipboard.writeText(JSON.stringify({ quickdraw: 1, shapes, assets }))
+      await navigator.clipboard.writeText(JSON.stringify(Editor.localClipboard))
     } catch (e) { console.warn('board copy failed', e) }
   }
+  // Programmatic paste for hosts without a paste event: same order as _paste
+  // minus the event-only sources (files and items need the real event).
   async pasteFromClipboard() {
-    // images first, then our own shape payloads
+    if (Editor.localClipboard?.quickdraw) { this._pasteShapes(Editor.localClipboard); return }
     try {
       if (navigator.clipboard.read) {
         const items = await navigator.clipboard.read()
@@ -1519,12 +1529,12 @@ export class Editor {
           }
         }
       }
-    } catch {}
+    } catch (e) { console.warn('board clipboard read failed', e) }
     try {
       const text = await navigator.clipboard.readText()
       const data = JSON.parse(text)
       if (data && data.quickdraw && Array.isArray(data.shapes)) this._pasteShapes(data)
-    } catch {}
+    } catch (e) { console.warn('board clipboard text read failed', e) }
   }
   _pasteShapes(data) {
     let z = this.store.maxZ()
@@ -1548,10 +1558,31 @@ export class Editor {
     if (this.tool !== 'select') this.setTool('select')
     this.setSelection(ids)
   }
-  _paste(e) {
+  async _paste(e) {
     if (this.readonly || this.editing) return
-    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'))
-    if (files.length) { e.preventDefault(); this.importImageBlobs(files) }
+    const dt = e.clipboardData
+    // 1. image files (Finder/file copies): synchronous, permission-free, and
+    //    unambiguous — image data on the clipboard never comes from us.
+    const files = [...(dt?.files || [])].filter((f) => f.type.startsWith('image/'))
+    if (files.length) { e.preventDefault(); this.importImageBlobs(files); return }
+    // 2. raw image data (screenshots, copy-image): same reasoning via items.
+    const blobs = [...(dt?.items || [])]
+      .filter((it) => it.type && it.type.startsWith('image/'))
+      .map((it) => { try { return it.getAsFile() } catch { return null } })
+      .filter(Boolean)
+    if (blobs.length) { e.preventDefault(); this.importImageBlobs(blobs); return }
+    // 3. same-page shape copy: needs no permissions at all.
+    if (Editor.localClipboard?.quickdraw) { e.preventDefault(); this._pasteShapes(Editor.localClipboard); return }
+    // 4. cross-app shape payload as text; anything else is not ours to handle.
+    let text = ''
+    try {
+      text = dt?.getData('text/plain') || ''
+    } catch (err) { console.warn('board paste read failed', err); return }
+    if (!text) return
+    try {
+      const data = JSON.parse(text)
+      if (data && data.quickdraw && Array.isArray(data.shapes)) { e.preventDefault(); this._pasteShapes(data) }
+    } catch { /* plain text from elsewhere: leave it alone */ }
   }
   _drop(e) {
     if (this.readonly) return
