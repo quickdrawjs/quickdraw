@@ -817,3 +817,186 @@ describe('keyboard help overlay', () => {
     c2.remove()
   })
 })
+
+describe('connected arrows', () => {
+  // size m: half the arrow's 4, half the box border's 4, and 2 of paper
+  const GAP = 6
+  const box = (x, y, w = 100, h = 100) => {
+    editor.setTool('geo')
+    drag(editor, [[x, y], [x + w, y + h]])
+    return editor.store.shapes().at(-1)
+  }
+  const connect = (from, to, over = {}) => {
+    editor.setTool('arrow')
+    drag(editor, [from, to], over)
+    return editor.store.shapes().at(-1)
+  }
+  const arrows = () => editor.store.shapes().filter((s) => s.type === 'arrow')
+  let a, b
+  beforeEach(() => {
+    a = box(0, 0)
+    b = box(300, 0)
+  })
+
+  it('an arrow drawn from one shape to another holds on to both, edge to edge', () => {
+    const arr = connect([50, 50], [350, 50])
+    expect(arr.props.start).toEqual({ id: a.id, ax: 0.5, ay: 0.5 })
+    expect(arr.props.end).toEqual({ id: b.id, ax: 0.5, ay: 0.5 })
+    expect(arr.x).toBeCloseTo(100 + GAP)
+    expect(arr.x + arr.props.dx).toBeCloseTo(300 - GAP)
+    expect(arr.y + arr.props.dy).toBeCloseTo(50)
+  })
+
+  it('moving a shape moves its arrows in the same undo step', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.setSelection([b.id])
+    const undos = editor.store.undos.length
+    drag(editor, [[320, 2], [320, 202]]) // b's top edge, clear of its handles, down 200
+    const moved = editor.store.get(arr.id)
+    expect(editor.store.get(b.id).y).toBeCloseTo(200)
+    expect(moved.y + moved.props.dy).toBeGreaterThan(200) // ends on b, now below
+    expect(moved.props.end.id).toBe(b.id)
+    expect(editor.store.undos.length).toBe(undos + 1)
+    editor.store.undo()
+    const back = editor.store.get(arr.id)
+    expect(back.x).toBeCloseTo(arr.x)
+    expect(back.props.dy).toBeCloseTo(arr.props.dy)
+  })
+
+  it('a shape that changes outline re-points its arrows too', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.setSelection([b.id])
+    editor.setSelectedGeoKind('diamond')
+    // the diamond's left point is where the box's left edge was
+    expect(editor.store.get(arr.id).x + editor.store.get(arr.id).props.dx).toBeCloseTo(300 - GAP)
+    editor.setSelection([a.id])
+    editor.setSelectedGeoKind('triangle')
+    // the triangle's right side slants in: the start sits further in than the box edge did
+    expect(editor.store.get(arr.id).x).toBeLessThan(100)
+  })
+
+  it('a click on a shape with the arrow tool draws nothing', () => {
+    editor.setTool('arrow')
+    drag(editor, [[30, 40]])
+    expect(arrows().length).toBe(0)
+  })
+
+  it('holding ⌘ draws an arrow that holds on to nothing', () => {
+    const arr = connect([50, 50], [350, 50], { metaKey: true })
+    expect(arr.props.start).toBeUndefined()
+    expect(arr.props.end).toBeUndefined()
+    expect(arr.x).toBe(50)
+    expect(arr.props.dx).toBeCloseTo(300)
+  })
+
+  it('an arrow from empty paper holds on only where it ends; it never ends on its own start', () => {
+    const free = connect([150, 250], [350, 50])
+    expect(free.props.start).toBeUndefined()
+    expect(free.props.end.id).toBe(b.id)
+    editor.store.remove([free.id])
+    const self = connect([50, 50], [80, 60])
+    expect(self.props.start.id).toBe(a.id)
+    expect(self.props.end).toBeUndefined()
+  })
+
+  it('deleting a shape lets its arrows go where they are; undo connects them again', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.setSelection([b.id])
+    editor.deleteSelection()
+    const left = editor.store.get(arr.id)
+    expect(left.props.end).toBeUndefined()
+    expect(left.x + left.props.dx).toBeCloseTo(300 - GAP)
+    editor.store.undo()
+    expect(editor.store.get(arr.id).props.end.id).toBe(b.id)
+  })
+
+  it('an arrow dragged on its own lets go of both shapes', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.setSelection([arr.id])
+    drag(editor, [[150, 50], [150, 150]]) // its line, clear of the bend handle
+    const moved = editor.store.get(arr.id)
+    expect(moved.props.start).toBeUndefined()
+    expect(moved.props.end).toBeUndefined()
+    expect(moved.y).toBeCloseTo(150)
+  })
+
+  it('an arrow moved with its shapes stays connected', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.selectAll()
+    const key = { key: 'ArrowDown', shiftKey: true, metaKey: false, ctrlKey: false, preventDefault() {} }
+    editor._keyDown(key)
+    editor._keyUp(key)
+    const moved = editor.store.get(arr.id)
+    expect(moved.props.start.id).toBe(a.id)
+    expect(moved.props.end.id).toBe(b.id)
+    expect(moved.y).toBeCloseTo(arr.y + 32)
+  })
+
+  it('dragging an end off a shape lets go; onto another it holds on there', () => {
+    const c = box(300, 300)
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.setSelection([arr.id])
+    const end = editor.pageToScreen(arr.x + arr.props.dx, arr.y + arr.props.dy)
+    drag(editor, [[end.x, end.y], [200, 220]])
+    expect(editor.store.get(arr.id).props.end).toBeUndefined()
+    expect(editor.store.get(arr.id).x + editor.store.get(arr.id).props.dx).toBeCloseTo(200)
+    drag(editor, [[200, 220], [350, 350]])
+    const now = editor.store.get(arr.id)
+    expect(now.props.end.id).toBe(c.id)
+    expect(now.props.start.id).toBe(a.id)
+  })
+
+  it('copies of connected shapes are connected to each other; a lone copy holds on to nothing', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor.setTool('select')
+    editor.selectAll()
+    editor.duplicateSelection()
+    const copy = editor.store.get([...editor.selection].find((id) => editor.store.get(id).type === 'arrow'))
+    expect(copy.id).not.toBe(arr.id)
+    expect(editor.selection.has(copy.props.start.id)).toBe(true)
+    expect(editor.selection.has(copy.props.end.id)).toBe(true)
+    editor.setSelection([arr.id])
+    editor.duplicateSelection()
+    const lone = editor.store.get([...editor.selection][0])
+    expect(lone.props.start).toBeUndefined()
+    expect(lone.props.end).toBeUndefined()
+    expect(lone.x).toBeCloseTo(arr.x + 16)
+  })
+
+  it('pasted shapes stay connected to each other', () => {
+    const arr = connect([50, 50], [350, 50])
+    editor._pasteShapes({ quickdraw: 1, shapes: [editor.store.get(a.id), editor.store.get(b.id), editor.store.get(arr.id)], assets: {} })
+    const pasted = [...editor.selection].map((id) => editor.store.get(id))
+    const copy = pasted.find((s) => s.type === 'arrow')
+    expect(pasted.map((s) => s.id)).toContain(copy.props.start.id)
+    expect(pasted.map((s) => s.id)).toContain(copy.props.end.id)
+  })
+
+  it('a remote edit is not followed: its diff carries its own arrows', () => {
+    const arr = connect([50, 50], [350, 50])
+    const from = editor.store.get(b.id)
+    editor.store.applyDiff({ added: {}, removed: {}, updated: { [b.id]: [from, { ...from, y: 500 }] } }, 'remote')
+    expect(editor.store.get(arr.id)).toEqual(arr)
+  })
+
+  it('the shape an end would hold on to lights up', () => {
+    editor.setTool('arrow')
+    editor._pointerMove({ ...ev(50, 50), target: editor.canvas })
+    expect(editor._hoverTarget).toBe(a.id)
+    editor._pointerMove({ ...ev(50, 50, { metaKey: true }), target: editor.canvas })
+    expect(editor._hoverTarget).toBe(null)
+    pid++
+    editor._pointerDown({ ...ev(50, 50), target: editor.canvas })
+    editor._pointerMove({ ...ev(350, 50), target: editor.canvas })
+    expect(editor.session.target).toBe(b.id)
+    editor._pointerUp({ ...ev(350, 50), target: editor.canvas })
+    editor.setTool('select')
+    expect(editor._hoverTarget).toBe(null)
+  })
+})

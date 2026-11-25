@@ -156,6 +156,7 @@ export class Store {
     this.records = new Map()
     this.listeners = new Set() // { fn, source: 'user' | 'remote' | 'all' }
     this.historyListeners = new Set()
+    this.derivations = new Set() // fn(diff, source), run inside each transaction
     this.undos = []
     this.redos = []
     this._batch = null // open history batch: composed diff
@@ -200,12 +201,34 @@ export class Store {
     }
   }
 
+  // fn(diff, source) runs at the end of every outermost transaction, still
+  // inside it: what it writes joins the same diff, the same undo step and
+  // the same emit. Records that follow from others (an arrow's ends, from
+  // the shapes it connects) then move with them as one edit, for undo and
+  // for every peer. It sees the diff so far, and its own writes don't call
+  // it again.
+  derive(fn) {
+    this.derivations.add(fn)
+    return () => this.derivations.delete(fn)
+  }
+
+  _derive() {
+    const { diff, source } = this._tx
+    if (isDiffEmpty(diff)) return
+    for (const fn of [...this.derivations]) {
+      try { fn(diff, source) } catch (e) { console.warn('board derivation failed', e) }
+    }
+  }
+
   // Every mutation happens inside a transaction; nested calls share the outer
   // one. One diff is emitted per outermost transact.
   transact(fn, source = 'user') {
     if (this._tx) { fn(); return }
     this._tx = { diff: emptyDiff(), source }
-    try { fn() } finally {
+    try {
+      fn()
+      this._derive()
+    } finally {
       const { diff } = this._tx
       this._tx = null
       if (!isDiffEmpty(diff)) {

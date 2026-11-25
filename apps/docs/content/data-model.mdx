@@ -21,6 +21,31 @@ store.ids()          // every id
 store.size           // record count
 ```
 
+### Connected arrows
+
+An arrow or line end can hold on to a shape with a body (a geo shape, a
+note, text or an image). The end's binding sits on `props.start` or
+`props.end`:
+
+```js
+{ id: 'shape:abc', ax: 0.5, ay: 0.5 }
+```
+
+`ax` and `ay` are a point in the shape's box, as fractions of its width and
+height. At `0.5, 0.5` the end aims at the middle and stops at the outline
+wherever the other end leads it; elsewhere it keeps that point.
+
+The arrow keeps its drawn `x`, `y`, `dx` and `dy` as well, so anything that
+only draws records still shows it where it is. The editor re-points it
+inside the same transaction whenever a shape it holds on to changes, with
+`store.derive`:
+
+```js
+const stop = store.derive((diff, source) => {
+  // write records that follow from this diff: they join it
+})
+```
+
 ## Diffs
 
 Every mutation happens in a transaction, and every transaction emits:

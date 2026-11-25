@@ -393,3 +393,54 @@ describe('the wire: packDiff / unpackDiff / streamDiffs', () => {
     }
   })
 })
+
+describe('derive', () => {
+  it('writes inside the transaction: one diff, one emit, one undo step', () => {
+    const s = new Store()
+    s.put(shape('a'))
+    s.put(shape('b', 50))
+    // b keeps 50 to the right of a
+    s.derive((diff) => { if (diff.updated.a) s.update('b', { x: s.get('a').x + 50 }) })
+    const fn = vi.fn()
+    s.listen(fn)
+    const undos = s.undos.length
+    s.update('a', { x: 10 })
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(Object.keys(fn.mock.calls[0][0].updated).sort()).toEqual(['a', 'b'])
+    expect(s.get('b').x).toBe(60)
+    expect(s.undos.length).toBe(undos + 1)
+    s.undo()
+    expect(s.get('a').x).toBe(0)
+    expect(s.get('b').x).toBe(50)
+  })
+
+  it('sees the source, is not called again by its own writes, and stops when let go', () => {
+    const s = new Store()
+    s.put(shape('a'))
+    const calls = []
+    const stop = s.derive((diff, source) => {
+      calls.push(source)
+      s.update('a', { y: 1 })
+    })
+    s.update('a', { x: 1 })
+    s.applyDiff({ added: {}, removed: {}, updated: { a: [s.get('a'), { ...s.get('a'), x: 2 }] } }, 'remote')
+    expect(calls).toEqual(['user', 'remote'])
+    stop()
+    s.update('a', { x: 3 })
+    expect(calls.length).toBe(2)
+  })
+
+  it('runs only when the transaction changed something, and a failing one leaves the edit standing', () => {
+    const s = new Store()
+    const fn = vi.fn(() => { throw new Error('boom') })
+    s.derive(fn)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    s.transact(() => {})
+    expect(fn).not.toHaveBeenCalled()
+    s.put(shape('a'))
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(s.get('a')).toBeTruthy()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})

@@ -46,6 +46,20 @@ export interface ShapeRecord {
   props: Record<string, any>
 }
 
+/**
+ * What an arrow or line end holds on to, on its `props.start` / `props.end`:
+ * the shape's id, and a point in its box as fractions of its width and
+ * height. At (0.5, 0.5) the end aims at the shape's middle and stops at its
+ * outline wherever the other end leads it; elsewhere it holds on to that
+ * point. The record keeps its drawn `x`, `y`, `dx`, `dy` too; the editor
+ * re-points it whenever the shape changes.
+ */
+export interface Binding {
+  id: string
+  ax: number
+  ay: number
+}
+
 /** An image asset record (dataURL source shared by image shapes). */
 export interface AssetRecord {
   id: string
@@ -199,6 +213,14 @@ export class Store {
    * document diff of its own).
    */
   listenHistory(fn: () => void): () => void
+
+  /**
+   * Run `fn` at the end of every outermost transaction, still inside it: what
+   * it writes joins the same diff, undo step and emit. For records that follow
+   * from others, such as a connected arrow's ends. Its own writes don't call it
+   * again. Returns an unsubscribe function.
+   */
+  derive(fn: (diff: Diff, source: DiffSource) => void): () => void
 
   transact(fn: () => void, source?: DiffSource): void
   put(rec: BoardRecord, source?: DiffSource): void

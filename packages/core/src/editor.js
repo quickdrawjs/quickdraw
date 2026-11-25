@@ -10,6 +10,9 @@ import {
   scaleShape, textLayout, noteLayout, NOTE_W, sampleLinePts, resetTextLayouts,
 } from './shapes.js'
 import { boundsUnion, boundsExpand, boundsContain, clamp, rotWith } from './geometry.js'
+import {
+  canBind, isLineish, coversPoint, bindingAt, withBinding, remapBindings, followBindings, pageOutline,
+} from './bindings.js'
 
 const ZOOM_MIN = 0.05
 const ZOOM_MAX = 8
@@ -82,6 +85,7 @@ export class Editor {
       this.requestRender()
       this.emit('change')
     })
+    this._unsubDerive = this.store.derive((diff, source) => this._followBindings(diff, source))
     // history moves on its own channel: the end of a gesture batch changes
     // canUndo/canRedo without emitting a document diff
     this._unsubHistory = this.store.listenHistory(() => this.emit('history'))
@@ -263,6 +267,7 @@ export class Editor {
     if (!TOOLS.includes(tool)) return
     this._commitText()
     this.tool = tool
+    this._setHoverTarget(null)
     if (tool !== 'select') this.setSelection([])
     this._syncCursor()
     this.emit('tool')
@@ -440,16 +445,82 @@ export class Editor {
     if (!this.selection.size) return
     const ids = []
     let z = this.store.maxZ()
+    // copies of connected shapes stay connected to each other
+    const copies = new Map([...this.selection].map((id) => [id, newId()]))
     this.store.transact(() => {
       for (const id of this.selection) {
         const s = this.store.get(id)
         if (!s || s.typeName === 'asset') continue
-        const copy = { ...s, id: newId(), x: s.x + offset, y: s.y + offset, z: ++z }
+        const props = isLineish(s) ? remapBindings(s.props, copies) : s.props
+        const copy = { ...s, id: copies.get(id), x: s.x + offset, y: s.y + offset, z: ++z, props }
         this.store.put(copy)
         ids.push(copy.id)
       }
     })
     this.setSelection(ids)
+  }
+
+  // ---- connected arrows ----------------------------------------------------
+  // Arrows follow the shapes they hold on to, inside the edit that moved the
+  // shapes: one undo step, one diff for every peer. A remote diff carries
+  // its own arrows already.
+  _followBindings(diff, source) {
+    if (source !== 'user') return
+    const touched = new Set([...Object.keys(diff.added), ...Object.keys(diff.updated), ...Object.keys(diff.removed)])
+    for (const s of this.store.shapes()) {
+      if (!isLineish(s)) continue
+      const p = s.props
+      if (!p.start && !p.end) continue
+      if (!touched.has(s.id) && !touched.has(p.start?.id) && !touched.has(p.end?.id)) continue
+      const next = followBindings(s, (id) => this.store.get(id))
+      if (next) this.store.put(next)
+    }
+  }
+  // holding ⌘ (Ctrl) draws an arrow end that holds on to nothing
+  _bindsOn(e) {
+    return !(e.metaKey || e.ctrlKey)
+  }
+  // the shape an arrow end at page point p would hold on to: the topmost one
+  // with a body under it, unless that is one to skip (the arrow itself, or
+  // what its other end holds on to)
+  _bindTarget(p, skip = []) {
+    const tol = 8 / this.camera.z
+    const list = this.shapesSorted()
+    for (let i = list.length - 1; i >= 0; i--) {
+      const s = list[i]
+      if (!canBind(s) || !coversPoint(s, p.x, p.y, tol)) continue
+      return skip.includes(s.id) ? null : s
+    }
+    return null
+  }
+  // arrows that move without the shapes they hold on to let go of them
+  _letGo(ids) {
+    const moving = new Set(ids)
+    this.store.transact(() => {
+      for (const id of moving) {
+        const s = this.store.get(id)
+        if (!isLineish(s)) continue
+        let props = s.props
+        for (const end of ['start', 'end']) {
+          if (props[end] && !moving.has(props[end].id)) props = withBinding(props, end, null)
+        }
+        if (props !== s.props) this.store.put({ ...s, props })
+      }
+    })
+  }
+  // with the arrow or line tool up, the shape a press would start from lights up
+  _hoverBind(e) {
+    let id = null
+    if ((this.tool === 'arrow' || this.tool === 'line') && this._isSurface(e.target) && this._bindsOn(e)) {
+      const s = this._evPoint(e)
+      id = this._bindTarget(this.screenToPage(s.x, s.y))?.id || null
+    }
+    this._setHoverTarget(id)
+  }
+  _setHoverTarget(id) {
+    if (id === (this._hoverTarget || null)) return
+    this._hoverTarget = id
+    this.requestRender()
   }
   bringToFront() {
     let z = this.store.maxZ()
@@ -516,6 +587,8 @@ export class Editor {
     // blurring the board) must not leave a sticky space-pan behind
     this._onBlur = () => { this.spaceHeld = false; this._endNudge(); this._syncCursor() }
     c.addEventListener('blur', this._onBlur)
+    this._onLeave = () => this._setHoverTarget(null)
+    c.addEventListener('pointerleave', this._onLeave)
     this._ro = new ResizeObserver(() => this.requestRender())
     this._ro.observe(c)
   }
@@ -535,6 +608,7 @@ export class Editor {
     if (e.button === 2) return
     if (e.pointerType !== 'mouse' && e.cancelable !== false) e.preventDefault()
     this._endNudge()
+    this._setHoverTarget(null)
     if (this.editing) this._commitText()
     this.container.focus({ preventScroll: true })
     const s = this._evPoint(e)
@@ -608,6 +682,7 @@ export class Editor {
     if (this._pointers.has(e.pointerId)) this._pointers.set(e.pointerId, this._evPoint(e))
     const ss = this.session
     if (!ss) {
+      this._hoverBind(e)
       this._hoverCursor(e)
       return
     }
@@ -921,8 +996,11 @@ export class Editor {
   }
 
   // ---- line / arrow --------------------------------------------------------
+  // pressed on a shape, the line starts from it; let go over one, it ends on
+  // it, and from then on it follows both
   _beginLineish(type, p, e) {
     const id = newId()
+    const from = this._bindsOn(e) ? this._bindTarget(p) : null
     this.store.beginBatch()
     this.store.put({
       id, typeName: 'shape', type, x: p.x, y: p.y, rot: 0, z: this.store.maxZ() + 1,
@@ -931,13 +1009,16 @@ export class Editor {
         color: this.styles.color, size: this.styles.size,
         dash: this.styles.dash === 'draw' ? 'solid' : this.styles.dash,
         ...this._opacityProp(),
+        ...(from ? { start: bindingAt(from, p.x, p.y) } : {}),
       },
     })
-    this.session = { type: 'lineish', id }
+    this.session = { type: 'lineish', id, target: null, origin: p, far: 0 }
   }
   _dragLineish(p, e) {
-    const s = this.store.get(this.session.id)
+    const ss = this.session
+    const s = this.store.get(ss.id)
     if (!s) return
+    ss.far = Math.max(ss.far, Math.hypot(p.x - ss.origin.x, p.y - ss.origin.y))
     let dx = p.x - s.x, dy = p.y - s.y
     if (e.shiftKey) {
       const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
@@ -945,13 +1026,20 @@ export class Editor {
       dx = Math.cos(a) * len
       dy = Math.sin(a) * len
     }
-    this.store.update(s.id, { props: { dx, dy } })
+    const end = { x: s.x + dx, y: s.y + dy }
+    const to = this._bindsOn(e) ? this._bindTarget(end, [s.id, s.props.start?.id]) : null
+    ss.target = to?.id || null
+    this.store.put({ ...s, props: withBinding({ ...s.props, dx, dy }, 'end', to && bindingAt(to, end.x, end.y)) })
   }
   _endLineish() {
-    const s = this.store.get(this.session.id)
+    const ss = this.session
+    const s = this.store.get(ss.id)
     this.session = null
-    if (s && Math.hypot(s.props.dx, s.props.dy) < 2 / this.camera.z) this.store.remove([s.id])
+    // a click is no line, even one that a shape's middle would have drawn out
+    const tiny = 2 / this.camera.z
+    if (s && (ss.far < tiny || Math.hypot(s.props.dx, s.props.dy) < tiny)) this.store.remove([s.id])
     this.store.endBatch()
+    this.requestRender()
     // the tool stays: one line or arrow after another
   }
 
@@ -1137,6 +1225,8 @@ export class Editor {
     const h = this._hitHandle(s.x, s.y)
     if (h) {
       this.store.beginBatch()
+      // before the snapshot: a resize puts the snapshot back, bindings and all
+      if (h.kind !== 'handle') this._letGo(this.selection)
       if (h.kind === 'rotate') {
         const b = this.selectionBounds()
         this.session = {
@@ -1180,6 +1270,7 @@ export class Editor {
     if (!this.selection.size) return
     this.store.beginBatch()
     if (e.altKey) this.duplicateSelection(0)
+    this._letGo(this.selection)
     this.session = { type: 'translating', start: p, orig: this._snapshotSelection() }
     this._syncCursor('move')
   }
@@ -1255,18 +1346,25 @@ export class Editor {
     const s = this.store.get(ss.id)
     if (!s) return
     const pr = s.props
-    if (ss.which === 'start') {
-      const ex = s.x + pr.dx, ey = s.y + pr.dy
-      this.store.update(s.id, { x: p.x, y: p.y, props: { dx: ex - p.x, dy: ey - p.y } })
-    } else if (ss.which === 'end') {
-      let dx = p.x - s.x, dy = p.y - s.y
-      if (e.shiftKey) {
-        const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12)
-        const len = Math.hypot(dx, dy)
-        dx = Math.cos(a) * len
-        dy = Math.sin(a) * len
+    if (ss.which === 'start' || ss.which === 'end') {
+      // an end let go over a shape holds on to it; off every shape, it holds
+      // on to nothing
+      let q = p
+      if (ss.which === 'end' && e.shiftKey) {
+        const a = Math.round(Math.atan2(p.y - s.y, p.x - s.x) / (Math.PI / 12)) * (Math.PI / 12)
+        const len = Math.hypot(p.x - s.x, p.y - s.y)
+        q = { x: s.x + Math.cos(a) * len, y: s.y + Math.sin(a) * len }
       }
-      this.store.update(s.id, { props: { dx, dy } })
+      const other = ss.which === 'start' ? pr.end : pr.start
+      const to = this._bindsOn(e) ? this._bindTarget(q, [s.id, other?.id]) : null
+      ss.target = to?.id || null
+      const bind = to && bindingAt(to, q.x, q.y)
+      if (ss.which === 'start') {
+        const ex = s.x + pr.dx, ey = s.y + pr.dy
+        this.store.put({ ...s, x: q.x, y: q.y, props: withBinding({ ...pr, dx: ex - q.x, dy: ey - q.y }, 'start', bind) })
+      } else {
+        this.store.put({ ...s, props: withBinding({ ...pr, dx: q.x - s.x, dy: q.y - s.y }, 'end', bind) })
+      }
     } else if (ss.which === 'bend') {
       // signed distance of the pointer from the straight chord
       const len = Math.hypot(pr.dx, pr.dy) || 1
@@ -1420,6 +1518,7 @@ export class Editor {
           this.store.beginBatch()
         }
         this.store.transact(() => {
+          this._letGo(this.selection)
           for (const id of this.selection) {
             const s = this.store.get(id)
             if (s) this.store.update(id, { x: s.x + dx, y: s.y + dy })
@@ -1536,13 +1635,13 @@ export class Editor {
         assetMap[a.id] = nid
         this.store.put({ ...a, id: nid })
       }
+      const shapeMap = new Map(data.shapes.map((s) => [s.id, newId()]))
       for (const s of data.shapes) {
-        const nid = newId()
+        const nid = shapeMap.get(s.id)
         ids.push(nid)
-        this.store.put({
-          ...s, id: nid, x: s.x + 16, y: s.y + 16, z: ++z,
-          props: s.props.assetId ? { ...s.props, assetId: assetMap[s.props.assetId] || s.props.assetId } : s.props,
-        })
+        let props = s.props.assetId ? { ...s.props, assetId: assetMap[s.props.assetId] || s.props.assetId } : s.props
+        if (isLineish(s)) props = remapBindings(props, shapeMap)
+        this.store.put({ ...s, id: nid, x: s.x + 16, y: s.y + 16, z: ++z, props })
       }
     })
     if (this.tool !== 'select') this.setTool('select')
@@ -1834,12 +1933,15 @@ export class Editor {
         ]
         const bm = bendMidpoint(pr)
         hs.push(this.pageToScreen(one.x + bm.x, one.y + bm.y))
-        for (const p2 of hs) {
+        // an end that holds on to a shape is a filled dot
+        const held = [!!pr.start, !!pr.end, false]
+        hs.forEach((p2, i) => {
           ctx.beginPath()
           ctx.arc(p2.x, p2.y, 5, 0, Math.PI * 2)
+          ctx.fillStyle = held[i] ? t.selection : t.handleFill
           ctx.fill()
           ctx.stroke()
-        }
+        })
       } else {
         // rotated single shape draws its true (rotated) frame
         if (one && one.rot) {
@@ -1889,6 +1991,24 @@ export class Editor {
           }
         }
       }
+    }
+
+    // the shape an arrow end would hold on to
+    const tid = this.session ? this.session.target : this._hoverTarget
+    const target = tid ? this.store.get(tid) : null
+    if (target) {
+      const pts = pageOutline(target)
+      ctx.beginPath()
+      for (let i = 0; i < pts.length; i += 2) {
+        const q = this.pageToScreen(pts[i], pts[i + 1])
+        i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)
+      }
+      ctx.closePath()
+      ctx.fillStyle = t.selectionFill
+      ctx.strokeStyle = t.selection
+      ctx.lineWidth = 2
+      ctx.fill()
+      ctx.stroke()
     }
 
     // marquee
@@ -2006,6 +2126,7 @@ export class Editor {
     cancelAnimationFrame(this._fitEaseRaf || 0)
     cancelAnimationFrame(this._laserRaf || 0)
     this._unsubStore()
+    this._unsubDerive()
     this._unsubHistory()
     if (typeof document !== 'undefined' && document.fonts) document.fonts.removeEventListener('loadingdone', this._onFonts)
     this._ro.disconnect()
@@ -2024,6 +2145,7 @@ export class Editor {
     c.removeEventListener('dragover', this._onDragOver)
     c.removeEventListener('paste', this._onPaste)
     c.removeEventListener('blur', this._onBlur)
+    c.removeEventListener('pointerleave', this._onLeave)
     this.canvas.remove()
     this.overlay.remove()
     c.classList.remove('qd-root')
