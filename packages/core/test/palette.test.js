@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+// @vitest-environment jsdom
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   THEMES, themeOf, COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, GEO_IDS, GRID_IDS,
-  SIZES, FONT_SIZES, FONTS,
+  SIZES, FONT_SIZES, FONTS, FONT_IDS, setFontStacks, resetFontStacks, fontStackOf,
 } from '../src/palette.js'
 
 describe('palette', () => {
@@ -48,5 +49,42 @@ describe('palette', () => {
       // a dot lays down less ink than a rule, so it has to run darker
       expect(alpha(theme.grid.dot.minor)).toBeGreaterThan(alpha(theme.grid.line.minor))
     }
+  })
+})
+
+describe('font stacks', () => {
+  afterEach(() => resetFontStacks())
+
+  it('defaults resolve every rostered id; unknown ids fall back to draw', () => {
+    for (const id of FONT_IDS) expect(fontStackOf(id)).toBe(FONTS[id])
+    expect(fontStackOf('nope')).toBe(FONTS.draw)
+    expect(fontStackOf()).toBe(FONTS.draw)
+  })
+
+  it('setFontStacks remaps ids (and registers new ones); reset restores', () => {
+    setFontStacks({ sans: "'Inter', sans-serif", brand: "'Brand', serif" })
+    expect(fontStackOf('sans')).toBe("'Inter', sans-serif")
+    expect(fontStackOf('brand')).toBe("'Brand', serif")
+    expect(fontStackOf('draw')).toBe(FONTS.draw)
+    resetFontStacks()
+    expect(fontStackOf('sans')).toBe(FONTS.sans)
+    expect(fontStackOf('brand')).toBe(FONTS.draw)
+  })
+
+  it('rejects empty ids and stacks', () => {
+    expect(() => setFontStacks({ '': 'serif' })).toThrow(TypeError)
+    expect(() => setFontStacks({ sans: '' })).toThrow(TypeError)
+    expect(() => setFontStacks({ sans: 42 })).toThrow(TypeError)
+  })
+
+  it('text layout follows the override', async () => {
+    const { textLayout } = await import('../src/shapes.js')
+    const shape = (font) => ({
+      id: 't', typeName: 'shape', type: 'text', x: 0, y: 0, rot: 0, z: 1,
+      props: { text: 'hi', size: 'm', color: 'black', font },
+    })
+    expect(textLayout(shape('sans')).font).toBe(FONTS.sans)
+    setFontStacks({ sans: "'Inter', sans-serif" })
+    expect(textLayout(shape('sans')).font).toBe("'Inter', sans-serif")
   })
 })
