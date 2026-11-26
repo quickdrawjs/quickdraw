@@ -9,7 +9,9 @@ export {
   themeOf, THEMES, COLOR_IDS, SIZE_IDS, DASH_IDS, FILL_IDS, GEO_IDS, GRID_IDS,
   SIZES, FONT_SIZES, FONTS,
 } from './palette.js'
-export { pageBounds, localBounds, drawShape, hitShape } from './shapes.js'
+export { pageBounds, localBounds, drawShape, hitShape, textLayout, noteLayout } from './shapes.js'
+export { boundsUnion, boundsExpand } from './geometry.js'
+export { sortShapesForRender, setShapePlatform, resetShapePlatform } from './shapes.js'
 export { strokeOutline, inkOptions } from './freehand.js'
 
 import { Editor } from './editor.js'
