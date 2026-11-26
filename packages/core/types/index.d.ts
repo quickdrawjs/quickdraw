@@ -230,6 +230,9 @@ export interface EditorOptions {
   camera?: Camera
   styles?: Partial<Styles>
   geoKind?: GeoId
+  /** Opt in to embed scrolling: plain wheel passes to the page, Ctrl/Meta+wheel zooms the board.
+   * Off by default (wheel pans as before); pointer tools keep working either way. */
+  disablePanScroll?: boolean
 }
 
 export type EditorEvent =
@@ -250,6 +253,7 @@ export class Editor {
   theme: Theme
   grid: GridId
   readonly: boolean
+  disablePanScroll: boolean
   camera: Camera
   styles: Styles
   geoKind: GeoId

@@ -17,6 +17,8 @@ export interface QuickdrawProps {
   grid?: GridId
   /** Lock input (also hides the toolbar). */
   readonly?: boolean
+  /** Opt in to embed scrolling: plain wheel passes to the page, Ctrl/Meta+wheel zooms the board. Live-switchable. */
+  disablePanScroll?: boolean
   /** Hide the stock toolbar (bring your own chrome). */
   hideUi?: boolean
   /** Show the theme switch in the board menu (default true). */
