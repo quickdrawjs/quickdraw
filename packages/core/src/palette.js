@@ -105,6 +105,7 @@ export const NOTE_FONT_SIZES = { s: 16, m: 20, l: 26, xl: 32 }
 
 export const DASH_IDS = ['draw', 'solid', 'dashed', 'dotted']
 export const FILL_IDS = ['none', 'semi', 'solid', 'pattern']
+export const FONT_IDS = ['draw', 'sans', 'serif', 'mono']
 
 export const FONTS = {
   // 'Quickdraw Hand' is Libre Baskerville, bundled via quickdraw.css; the rest are
