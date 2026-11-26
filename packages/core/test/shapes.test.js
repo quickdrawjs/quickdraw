@@ -127,6 +127,27 @@ describe('text layout', () => {
     expect(l.w).toBe(120)
   })
 
+  it('wraps oversized tokens within a fixed-width box', () => {
+    const text = 'https://example.com/abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz'
+    const t = { id: 't', typeName: 'shape', type: 'text', x: 0, y: 0, rot: 0, z: 1, props: { text, size: 'm', autosize: false, w: 200, font: 'draw' } }
+    const l = textLayout(t)
+    expect(l.lines.length).toBeGreaterThan(1)
+    expect(l.lines.map(({ text }) => text).join('')).toBe(text)
+    expect(l.lines.every(({ w }) => w <= 200)).toBe(true)
+  })
+
+  it('wraps at grapheme boundaries for emoji and combining marks', () => {
+    const family = '👨‍👩‍👧‍👦'
+    const combining = 'e\u0301'
+    const text = family.repeat(8) + combining.repeat(8)
+    const t = { id: 't', typeName: 'shape', type: 'text', x: 0, y: 0, rot: 0, z: 1, props: { text, size: 'm', autosize: false, w: 200, font: 'draw' } }
+    const l = textLayout(t)
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    const clusters = (value) => Array.from(segmenter.segment(value), ({ segment }) => segment)
+    expect(l.lines.map(({ text }) => text).flatMap(clusters)).toEqual(clusters(text))
+    expect(l.lines.every(({ w }) => w <= 200)).toBe(true)
+  })
+
   it('caches per props object (identity)', () => {
     const t = { id: 't', typeName: 'shape', type: 'text', x: 0, y: 0, rot: 0, z: 1, props: { text: 'hello', size: 'm' } }
     expect(textLayout(t)).toBe(textLayout(t))
