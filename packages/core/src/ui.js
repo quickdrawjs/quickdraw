@@ -455,7 +455,7 @@ export function buildUI(editor, { hidden = false, onSave, themeToggle = true, gr
     { label: 'Tools', rows: [
       ['Select', 'V / 1'], ['Hand (hold Space)', 'H'], ['Draw', 'D / P / B'],
       ['Highlight', 'I'], ['Eraser', 'E'], ['Laser', 'K'],
-      ['Arrow', 'A'], ['Line', 'L'], ['Shape', 'G'],
+      ['Arrow', 'A'], ['Line', 'L'], ['Arrow without connecting', 'Hold ⌘'], ['Shape', 'G'],
       ['Rectangle', 'R'], ['Ellipse', 'O'], ['Text', 'T'], ['Sticky note', 'N'],
     ]},
     { label: 'Edit', rows: [

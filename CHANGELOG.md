@@ -6,6 +6,16 @@ versioned in lockstep.
 
 ## Unreleased
 
+- Arrows and lines connect to shapes. Drawn from one shape to another, or
+  with an end dragged onto one, an arrow holds on to it (`props.start` /
+  `props.end`) and follows as the shape moves, resizes, turns or changes
+  kind, in the same undo step. Pressed in a shape's middle half, an end aims
+  at its centre and meets the outline; nearer the edge it keeps that point.
+  It lets go when its shape is deleted or when it is moved on its own;
+  copies of connected shapes stay connected to each other. Hold ⌘ (Ctrl) to
+  draw one that holds on to nothing.
+- `store.derive(fn)`: writes that follow from a transaction, made inside it,
+  so they share its diff and its undo step.
 - Undo never seems to do nothing: an edit that ends where it began (a drag
   back to the start, a style set to what it was) leaves no undo step.
 - Holding an arrow key moves the selection as one undo step.
